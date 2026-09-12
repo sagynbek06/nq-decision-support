@@ -2,10 +2,14 @@
 
 Planned development phases for the NQ decision-support system, in order.
 
-## Phase 1: HMM Regime Detection (Program 1)
+## Phase 1: HMM Regime Detection (Program 1) — ✅ Complete
 Gaussian baseline hidden Markov model for market regime detection, followed by
 more robust emission models (skew-t) to better handle fat tails and asymmetry
 in returns.
+
+**Outcome:** switching from Gaussian to a from-scratch Student-t emission HMM
+raised regime detection accuracy from 29% to 45%, with the largest gains
+around return shocks (see [docs/writeups/01_regime_detection.md](docs/writeups/01_regime_detection.md)).
 
 ## Phase 2: Order Flow Monitor (Program 2)
 Volume Delta, Order Book Imbalance, and Marchenko-Pastur filtering to separate
