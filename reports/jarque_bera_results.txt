@@ -1,0 +1,5 @@
+Jarque-Bera Normality Test Results (detected regimes)
+=======================================================
+BULL       n=247    JB statistic=    3.0406   p-value=2.186414e-01
+BEAR       n=6      JB statistic=    0.9102   p-value=6.343705e-01
+SIDEWAYS   n=1007   JB statistic=   30.0252   p-value=3.020713e-07
