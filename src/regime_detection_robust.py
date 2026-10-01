@@ -187,7 +187,13 @@ class StudentTHMM:
         K = len(mu)
         return np.stack([_student_t_logpdf(x, mu[k], sigma2[k], nu[k]) for k in range(K)], axis=1)
 
-    def _fit_single(self, x, seed):
+    def _fit_single(self, x, seed, loglik_trace=None):
+        """
+        `loglik_trace`, if given a list, gets each iteration's log-likelihood
+        appended to it -- used by tests to check the EM monotonicity
+        invariant (log-likelihood must never decrease). Not used in normal
+        fitting.
+        """
         K = self.n_states
         pi, A, mu, sigma2, nu = self._init_params(x, seed)
 
@@ -198,6 +204,8 @@ class StudentTHMM:
             log_A = np.log(A + 1e-300)
 
             log_alpha, log_beta, loglik = _forward_backward(log_pi, log_A, log_B)
+            if loglik_trace is not None:
+                loglik_trace.append(float(loglik))
 
             # log_gamma/log_xi are mathematically <= 0 (they're log-probabilities),
             # but can overshoot by a hair of floating-point noise; clip defensively
