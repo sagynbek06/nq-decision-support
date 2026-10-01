@@ -1,8 +1,8 @@
-numpy
-pandas
-scipy
-hmmlearn
-matplotlib
-streamlit
-plotly
-pytest
+numpy==2.5.3
+pandas==3.0.5
+scipy==1.18.1
+hmmlearn==0.3.3
+matplotlib==3.11.2
+streamlit==1.63.0
+plotly==7.0.0
+pytest==9.1.1
