@@ -4,44 +4,28 @@ import numpy as np
 import pytest
 
 from src.regime_detection import fit_hmm, label_states, fit_and_label
+from src.synthetic_data import generate_well_separated_regime_returns
 
-# This test builds its own small, cleanly-separated synthetic dataset rather
-# than depending on notebooks/01_synthetic_data.ipynb's output
-# (data/synthetic_nq.csv is gitignored, so it may not exist on a fresh
-# checkout or in CI). The mean/vol values below are deliberately more
-# separated than the realistic ones used in that notebook: a Gaussian HMM
-# fit on daily returns alone genuinely struggles to tell a low-drift bull
-# regime apart from sideways chop when their means differ by only a small
-# fraction of the daily volatility (as they realistically do) -- that's a
-# real limitation of the Gaussian baseline, not a bug, and is exactly why
-# ROADMAP.md lists a more robust skew-t emission model as a Phase 1
-# follow-up. This test instead checks that the fitting/labeling code is
-# *correct* by giving it regimes it should have no trouble separating.
-PARAMS = {
-    "bull": (0.020, 0.010),
-    "bear": (-0.020, 0.015),
-    "sideways": (0.0, 0.008),
-}
-
+# This test uses the well-separated regime generator from
+# src/synthetic_data.py rather than notebooks/01_synthetic_data.ipynb's
+# realistic one (data/synthetic_nq.csv is gitignored, so it may not exist
+# on a fresh checkout or in CI anyway). A Gaussian HMM fit on daily returns
+# alone genuinely struggles to tell a low-drift bull regime apart from
+# sideways chop when their means differ by only a small fraction of daily
+# volatility, as they realistically do -- a real limitation of the Gaussian
+# baseline (see docs/writeups/01_regime_detection.md), not a bug, and not
+# what this test is checking. This test instead verifies the fitting/
+# labeling *code* is correct by giving it regimes it should have no trouble
+# separating; see src/synthetic_data.py's module docstring for more.
 SEGMENT_LENGTH = 100
 N_CYCLES = 5  # repeat the bull/bear/sideways cycle so transitions aren't rare
 ACCURACY_THRESHOLD = 0.90
 
 
-def _generate_labeled_returns(rng, segment_length=SEGMENT_LENGTH, n_cycles=N_CYCLES):
-    order = ["bull", "bear", "sideways"] * n_cycles
-    returns, true_labels = [], []
-    for regime in order:
-        mu, sigma = PARAMS[regime]
-        returns.append(rng.normal(mu, sigma, size=segment_length))
-        true_labels.extend([regime] * segment_length)
-    return np.concatenate(returns), np.array(true_labels)
-
-
 @pytest.fixture(scope="module")
 def synthetic_data():
     rng = np.random.default_rng(1)
-    return _generate_labeled_returns(rng)
+    return generate_well_separated_regime_returns(rng, segment_length=SEGMENT_LENGTH, n_cycles=N_CYCLES)
 
 
 @pytest.fixture(scope="module")
