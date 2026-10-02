@@ -26,6 +26,16 @@ duplicates of each other:
   recover these cleanly-separated regimes has an implementation bug, not
   just a hard dataset.
 
+A third generator, `generate_ornstein_uhlenbeck`, produces a genuinely
+mean-reverting *level* series (not a return series like the two above) --
+added for the Hurst exponent module's test suite (src/hurst_exponent.py),
+which needs a reliably mean-reverting case to confirm DFA correctly reports
+Hurst well below 0.5. It's a classic, theoretically-grounded choice for
+that (unlike relying on an emergent property of the regime-switching
+generators, which turned out not to reliably produce a persistent/trending
+signature at realistic parameters -- see hurst_exponent.py's test fixtures
+for what does).
+
 Not every synthetic-data generator in this project lives here. Order flow
 (tests/test_order_flow.py), the kernel-regression trend-recovery check
 (tests/test_kernel_regression.py), and the options chain generator
@@ -199,3 +209,43 @@ def generate_well_separated_regime_returns(rng, segment_length=100, n_cycles=5, 
         returns.append(rng.normal(mu, sigma, size=segment_length))
         true_labels.extend([regime] * segment_length)
     return np.concatenate(returns), np.array(true_labels)
+
+
+DEFAULT_OU_THETA = 0.15  # mean-reversion speed; see generate_ornstein_uhlenbeck
+DEFAULT_OU_SIGMA = 1.0
+
+
+def generate_ornstein_uhlenbeck(n, theta=DEFAULT_OU_THETA, mu=0.0, sigma=DEFAULT_OU_SIGMA, x0=None, dt=1.0, random_state=None):
+    """
+    Simulate a mean-reverting level series via the Ornstein-Uhlenbeck SDE,
+    discretized with Euler-Maruyama:
+
+        dX_t = theta * (mu - X_t) * dt + sigma * sqrt(dt) * dW_t
+
+    Unlike `generate_regime_switching_returns` and
+    `generate_well_separated_regime_returns` above (which produce *return*
+    series with directional structure), this produces a *level* series that
+    pulls back toward `mu` at rate `theta` -- the classic textbook
+    mean-reverting process (used for modeling things like interest rates,
+    spreads, or implied vol in the wider literature). To use it as a
+    "returns" series (e.g. as DFA/Hurst input), take `np.diff(x)`: OU's
+    increments are negatively autocorrelated by construction (after an
+    up-move, reversion toward `mu` makes a down-move more likely), which is
+    exactly the signature a correctly-implemented Hurst estimator should
+    read as persistently mean-reverting (H well below 0.5).
+
+    `theta` controls reversion strength: empirically (see
+    tests/test_hurst_exponent.py), `theta=0.15` with `n=2500` reliably
+    gives DFA Hurst around 0.17-0.19 across random seeds -- comfortably and
+    consistently below 0.5 without needing extreme parameters.
+
+    Returns the level series `x` (length `n`), not increments.
+    """
+    rng = np.random.default_rng(random_state)
+    x = np.empty(n)
+    x[0] = mu if x0 is None else x0
+    noise = rng.normal(size=n - 1)
+    sqrt_dt = np.sqrt(dt)
+    for t in range(1, n):
+        x[t] = x[t - 1] + theta * (mu - x[t - 1]) * dt + sigma * sqrt_dt * noise[t - 1]
+    return x
