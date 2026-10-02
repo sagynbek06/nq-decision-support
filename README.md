@@ -13,11 +13,11 @@ call. No part of this project is intended to place trades autonomously.
 
 ## Status
 
-- **Phase 1: HMM Regime Detection — in progress**
-- Phase 2: Order Flow Monitor — not started
-- Phase 3: Kernel Regression — not started
-- Phase 4: Greeks Dashboard — not started
-- Phase 5: Consensus Engine — not started
+- **Phase 1: HMM Regime Detection — complete**
+- **Phase 2: Order Flow Monitor — complete**
+- **Phase 3: Kernel Regression — complete**
+- **Phase 4: Greeks Dashboard — complete**
+- **Phase 5: Consensus Engine — complete**
 - Phase 6: Real Data Integration — not started
 - Phase 7: Walk-Forward Hyperparameter Optimization — not started
 
