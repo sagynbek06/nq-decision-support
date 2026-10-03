@@ -55,6 +55,19 @@ def vote_from_regime(regime_label):
     return REGIME_VOTES[regime_label]
 
 
+def vote_from_regime_subsignal(sub_signal):
+    """
+    Program 1 (Ax-style upgrade, opt-in): a regime-conditioned trend/mean-
+    reversion sub-signal from `src.ax_regime_switch.ax_regime_subsignal`,
+    in place of the bare regime label `vote_from_regime` reads. That
+    function already scales its output to [-1, 1] itself (see its
+    docstring), so this is a pass-through clip, not a second squashing
+    convention -- the same relationship `vote_from_regime` has to its own
+    already-bounded `REGIME_VOTES` dict.
+    """
+    return float(np.clip(sub_signal, -1.0, 1.0))
+
+
 def vote_from_order_flow(signal, scale=2.0):
     """
     Program 2: the MP-filtered composite order-flow signal (roughly
@@ -87,7 +100,8 @@ def volatility_regime_from_gex(total_gex):
     return "dampening" if total_gex >= 0 else "amplifying"
 
 
-def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_gex, weights=None):
+def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_gex, weights=None,
+                       regime_mode="label", regime_subsignal=None):
     """
     Combine Programs 1-3 into a weighted directional consensus, and attach
     Program 4's GEX as separate volatility-regime context (see module
@@ -97,6 +111,18 @@ def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_g
     votes (DEFAULT_WEIGHTS); pass a dict with the same keys
     ("regime", "order_flow", "kernel") to override. Weights are normalized
     internally, so relative magnitudes are what matter, not their scale.
+
+    `regime_mode` picks how Program 1 feeds the "regime" vote:
+    - "label" (default): `vote_from_regime(regime_label)`, the original
+      bare bull/bear/sideways -> +1/-1/0 mapping. Unchanged default
+      behavior, so existing callers are unaffected.
+    - "subsignal": `vote_from_regime_subsignal(regime_subsignal)` instead
+      -- the Ax-style regime-conditioned trend/mean-reversion sub-signal
+      from `src.ax_regime_switch.ax_regime_subsignal` (see
+      docs/writeups/05b_ax_regime_switch.md), passed in by the caller via
+      `regime_subsignal`. `regime_label` is still required but unused in
+      this mode; ax_regime_subsignal needs it anyway to decide what to
+      compute `regime_subsignal` from, so the caller has it regardless.
 
     Returns a dict with the per-program votes, the weighted consensus
     score (in [-1, 1]), a "bullish"/"bearish"/"neutral" label (score within
@@ -109,8 +135,17 @@ def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_g
     if missing:
         raise ValueError(f"weights missing keys: {missing}")
 
+    if regime_mode == "label":
+        regime_vote = vote_from_regime(regime_label)
+    elif regime_mode == "subsignal":
+        if regime_subsignal is None:
+            raise ValueError("compute_consensus: regime_mode='subsignal' requires regime_subsignal")
+        regime_vote = vote_from_regime_subsignal(regime_subsignal)
+    else:
+        raise ValueError(f"unknown regime_mode {regime_mode!r}, expected 'label' or 'subsignal'")
+
     votes = {
-        "regime": vote_from_regime(regime_label),
+        "regime": regime_vote,
         "order_flow": vote_from_order_flow(order_flow_signal),
         "kernel": vote_from_kernel_deviation(kernel_deviation),
     }

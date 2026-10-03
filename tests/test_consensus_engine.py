@@ -6,6 +6,7 @@ import pytest
 
 from src.consensus_engine import (
     vote_from_regime,
+    vote_from_regime_subsignal,
     vote_from_order_flow,
     vote_from_kernel_deviation,
     volatility_regime_from_gex,
@@ -52,6 +53,20 @@ def test_vote_from_kernel_deviation_has_opposite_sign_of_input():
     assert vote_from_kernel_deviation(0.0) == pytest.approx(0.0)
     assert vote_from_kernel_deviation(3.0) < 0
     assert vote_from_kernel_deviation(-3.0) > 0
+
+
+def test_vote_from_regime_subsignal_passes_through_already_scaled_value():
+    assert vote_from_regime_subsignal(0.0) == pytest.approx(0.0)
+    assert vote_from_regime_subsignal(0.5) == pytest.approx(0.5)
+    assert vote_from_regime_subsignal(-0.5) == pytest.approx(-0.5)
+
+
+def test_vote_from_regime_subsignal_clips_to_unit_interval():
+    """Defensive clip, not a squashing transform -- ax_regime_subsignal
+    already tanh-squashes its output, so this only guards against a
+    caller-supplied value outside [-1, 1]."""
+    assert vote_from_regime_subsignal(1.5) == pytest.approx(1.0)
+    assert vote_from_regime_subsignal(-1.5) == pytest.approx(-1.0)
 
 
 def test_volatility_regime_from_gex():
@@ -135,6 +150,37 @@ def test_consensus_volatility_regime_is_independent_of_directional_label():
 
 def test_default_weights_are_equal():
     assert len(set(DEFAULT_WEIGHTS.values())) == 1
+
+
+# ---------------------------------------------------------------------------
+# regime_mode (Ax-style sub-signal opt-in)
+# ---------------------------------------------------------------------------
+
+def test_regime_mode_defaults_to_label_and_matches_original_behavior():
+    with_default = compute_consensus("bull", 2.0, -2.0, total_gex=0.0)
+    explicit_label_mode = compute_consensus("bull", 2.0, -2.0, total_gex=0.0, regime_mode="label")
+    assert with_default == explicit_label_mode
+    assert with_default["votes"]["regime"] == vote_from_regime("bull")
+
+
+def test_regime_mode_subsignal_uses_subsignal_instead_of_label():
+    result = compute_consensus(
+        "sideways", order_flow_signal=0.0, kernel_deviation=0.0, total_gex=0.0,
+        regime_mode="subsignal", regime_subsignal=0.6,
+    )
+    # regime_label "sideways" would vote 0.0 in "label" mode; "subsignal"
+    # mode ignores the label and uses the passed-in float instead.
+    assert result["votes"]["regime"] == pytest.approx(0.6)
+
+
+def test_regime_mode_subsignal_requires_regime_subsignal():
+    with pytest.raises(ValueError):
+        compute_consensus("bull", 0.0, 0.0, 0.0, regime_mode="subsignal")
+
+
+def test_compute_consensus_rejects_unknown_regime_mode():
+    with pytest.raises(ValueError):
+        compute_consensus("bull", 0.0, 0.0, 0.0, regime_mode="not_a_mode")
 
 
 # ---------------------------------------------------------------------------
