@@ -7,6 +7,7 @@ import pytest
 from src.consensus_engine import (
     vote_from_regime,
     vote_from_regime_subsignal,
+    vote_from_surprise,
     vote_from_order_flow,
     vote_from_kernel_deviation,
     volatility_regime_from_gex,
@@ -181,6 +182,79 @@ def test_regime_mode_subsignal_requires_regime_subsignal():
 def test_compute_consensus_rejects_unknown_regime_mode():
     with pytest.raises(ValueError):
         compute_consensus("bull", 0.0, 0.0, 0.0, regime_mode="not_a_mode")
+
+
+# ---------------------------------------------------------------------------
+# surprise_context / include_surprise (WSS opt-in fourth vote)
+# ---------------------------------------------------------------------------
+
+def test_vote_from_surprise_matches_tanh_formula_and_is_zero_when_inactive():
+    assert vote_from_surprise(0.0) == 0.0
+    assert vote_from_surprise(1.0, scale=2.0) == pytest.approx(np.tanh(0.5))
+
+
+def test_surprise_context_is_absent_by_default():
+    result = compute_consensus("bull", 0.0, 0.0, 0.0)
+    assert "surprise_context" not in result
+
+
+def test_surprise_context_is_surfaced_but_not_voted_on_by_default():
+    """Default integration: surprise_context is always echoed back when
+    provided, exactly like volatility_regime is for GEX, WITHOUT changing
+    the directional vote/score unless include_surprise=True is also set."""
+    context = {"active": True, "wss": 5.0, "events": [{"event_type": "NFP"}]}
+
+    without_context = compute_consensus("bull", 2.0, -2.0, total_gex=0.0)
+    with_context = compute_consensus("bull", 2.0, -2.0, total_gex=0.0, surprise_context=context)
+
+    assert with_context["surprise_context"] == context
+    assert with_context["score"] == pytest.approx(without_context["score"])
+    assert set(with_context["votes"]) == {"regime", "order_flow", "kernel"}
+
+
+def test_include_surprise_adds_a_fourth_vote_with_default_weight():
+    context = {"active": True, "wss": 5.0, "events": []}
+    result = compute_consensus(
+        "sideways", order_flow_signal=0.0, kernel_deviation=0.0, total_gex=0.0,
+        surprise_context=context, include_surprise=True,
+    )
+
+    expected_surprise_vote = vote_from_surprise(5.0)
+    manual_score = expected_surprise_vote / 4  # regime=0, order_flow=0, kernel=0, surprise weighted equally
+    assert result["votes"]["surprise"] == pytest.approx(expected_surprise_vote)
+    assert result["weights"]["surprise"] == pytest.approx(1.0)
+    assert result["score"] == pytest.approx(manual_score)
+
+
+def test_include_surprise_respects_custom_surprise_weight():
+    context = {"active": True, "wss": 5.0, "events": []}
+    result = compute_consensus(
+        "sideways", 0.0, 0.0, 0.0,
+        surprise_context=context, include_surprise=True, surprise_weight=0.1,
+    )
+    assert result["weights"]["surprise"] == pytest.approx(0.1)
+    # a heavily down-weighted surprise vote should barely move the score
+    assert abs(result["score"]) < abs(vote_from_surprise(5.0)) / 4
+
+
+def test_include_surprise_requires_surprise_context():
+    with pytest.raises(ValueError):
+        compute_consensus("bull", 0.0, 0.0, 0.0, include_surprise=True)
+
+
+def test_include_surprise_can_flip_the_label():
+    """Demonstrates real effect, not just an extra field: a strong enough
+    surprise vote can flip the label relative to the plain 3-vote
+    consensus, same style as test_consensus_weights_change_the_outcome."""
+    plain = compute_consensus("sideways", 0.0, 0.0, 0.0)
+    assert plain["label"] == "neutral"
+
+    bullish_surprise = {"active": True, "wss": 5.0, "events": []}
+    with_surprise = compute_consensus(
+        "sideways", 0.0, 0.0, 0.0,
+        surprise_context=bullish_surprise, include_surprise=True,
+    )
+    assert with_surprise["label"] == "bullish"
 
 
 # ---------------------------------------------------------------------------

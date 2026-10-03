@@ -68,6 +68,21 @@ def vote_from_regime_subsignal(sub_signal):
     return float(np.clip(sub_signal, -1.0, 1.0))
 
 
+def vote_from_surprise(wss, scale=2.0):
+    """
+    Program 1 extension (opt-in): the Weighted Surprise Score from
+    `src.wss_signal.compute_surprise_context`'s "wss" field, tanh-squashed
+    to [-1, 1] -- same scale and formula as `vote_from_order_flow` /
+    `vote_from_kernel_deviation` below, since WSS (like order flow and
+    kernel deviation, unlike the regime label) arrives as a raw,
+    unbounded-in-principle value rather than pre-squashed. An inactive
+    surprise context has `wss == 0.0`, which votes exactly 0.0 (neutral).
+    See `src/wss_signal.py`'s DESIGN NOTE for why this is a vote at all
+    rather than context-only like `volatility_regime`.
+    """
+    return float(np.tanh(wss / scale))
+
+
 def vote_from_order_flow(signal, scale=2.0):
     """
     Program 2: the MP-filtered composite order-flow signal (roughly
@@ -101,7 +116,8 @@ def volatility_regime_from_gex(total_gex):
 
 
 def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_gex, weights=None,
-                       regime_mode="label", regime_subsignal=None):
+                       regime_mode="label", regime_subsignal=None,
+                       surprise_context=None, include_surprise=False, surprise_weight=1.0):
     """
     Combine Programs 1-3 into a weighted directional consensus, and attach
     Program 4's GEX as separate volatility-regime context (see module
@@ -124,10 +140,24 @@ def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_g
       this mode; ax_regime_subsignal needs it anyway to decide what to
       compute `regime_subsignal` from, so the caller has it regardless.
 
+    `surprise_context` (optional): the dict `src.wss_signal.
+    compute_surprise_context` returns -- `{"active", "wss", "events"}`.
+    When given, it's always echoed back under the `"surprise_context"` key
+    in the result, the same always-present-context role `volatility_regime`
+    plays for GEX, REGARDLESS of `include_surprise`. Set `include_surprise=
+    True` to ALSO fold it into the directional vote as a fourth,
+    opt-in "surprise" vote (`vote_from_surprise(surprise_context["wss"])`,
+    weighted by `surprise_weight`, default 1.0 -- the same default weight
+    as the other three) -- see `src/wss_signal.py`'s DESIGN NOTE for why
+    this one gets a vote where GEX/Hurst don't. Both are off by default:
+    omit `surprise_context` and nothing about this function's output
+    changes from before this parameter existed.
+
     Returns a dict with the per-program votes, the weighted consensus
     score (in [-1, 1]), a "bullish"/"bearish"/"neutral" label (score within
-    +/-NEUTRAL_BAND of zero reads as neutral), and the GEX-derived
-    volatility regime.
+    +/-NEUTRAL_BAND of zero reads as neutral), the GEX-derived volatility
+    regime, and (only when `surprise_context` is passed) the surprise
+    context.
     """
     if weights is None:
         weights = DEFAULT_WEIGHTS
@@ -149,11 +179,18 @@ def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_g
         "order_flow": vote_from_order_flow(order_flow_signal),
         "kernel": vote_from_kernel_deviation(kernel_deviation),
     }
+    active_weights = dict(weights)
 
-    total_weight = sum(weights[k] for k in votes)
+    if include_surprise:
+        if surprise_context is None:
+            raise ValueError("compute_consensus: include_surprise=True requires surprise_context")
+        votes["surprise"] = vote_from_surprise(surprise_context["wss"])
+        active_weights["surprise"] = surprise_weight
+
+    total_weight = sum(active_weights[k] for k in votes)
     if total_weight <= 0:
         raise ValueError("sum of weights must be positive")
-    score = sum(weights[k] * votes[k] for k in votes) / total_weight
+    score = sum(active_weights[k] * votes[k] for k in votes) / total_weight
 
     if score > NEUTRAL_BAND:
         label = "bullish"
@@ -162,11 +199,14 @@ def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_g
     else:
         label = "neutral"
 
-    return {
+    result = {
         "votes": votes,
-        "weights": dict(weights),
+        "weights": active_weights,
         "score": score,
         "label": label,
         "volatility_regime": volatility_regime_from_gex(total_gex),
         "total_gex": total_gex,
     }
+    if surprise_context is not None:
+        result["surprise_context"] = surprise_context
+    return result
