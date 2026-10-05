@@ -170,9 +170,9 @@ bull/bear precede continuation in their implied direction more often than
 chance. `validate_regime_edge` tests this directly rather than assuming it,
 using this project's established walk-forward discipline: for each of
 `n_splits` expanding-window folds, fit a fresh `StudentTHMM` on only the
-data before that fold's test block, decode regimes over train+test jointly
-(so the test block's Viterbi path is informed by what came before, not
-restarted cold), then check what actually happened next on every test day.
+data before that fold's test block, decode regimes with the causal forward
+filter over train+test jointly (each bar's label uses only returns up to
+that bar), then check what actually happened next on every test day.
 A bull/bear day "succeeds" if the next bar continues in the implied
 direction; a sideways day "succeeds" if the next bar moves toward a `mu`
 calibrated from a trailing window ending at that day. Significance is
@@ -180,23 +180,33 @@ assessed with a permutation test — 500 shuffles of which regime label
 attaches to which (fixed, time-ordered) outcome, per the task spec — giving
 a p-value for each edge against the implicit random-walk null of 50/50.
 
+**Correction.** The first version of this section decoded regimes with
+Viterbi (`StudentTHMM.predict`). Viterbi labels an early bar using later
+returns, so that version leaked future information into every regime label.
+`validate_regime_edge` now uses the causal forward filter
+(`StudentTHMM.filter_states`), which uses only returns up to each bar. The
+figures below are the corrected ones. The earlier figures were: trend edge
+0.080 (p=0.002); reversion edge 0.005 (p=0.459); random-walk trend p=0.331
+and reversion p=0.497. The trend result holds, and the reversion result stays
+non-significant.
+
 **On a pure random walk** (seed=11, n=1800, no real structure of any kind):
-neither edge is significant, as it should be — `trend_p=0.331`,
-`reversion_p=0.497`.
+neither edge is significant, as it should be — `trend_p=0.571`,
+`reversion_p=0.487`.
 
 **On data built with real switching structure** — bull/bear blocks with
 genuine drift, alternating with blocks that are genuinely
 Ornstein-Uhlenbeck (mean-reverting, not just low-variance noise; see
 `tests/test_ax_regime_switch.py`'s `_build_mixed_trend_reversion_series`
 for why this distinction mattered) — the **trend edge comes through
-clearly**: `trend_edge=0.080`, `trend_p=0.002`, from 809 pooled test-day
+clearly**: `trend_edge=0.066`, `trend_p=0.002`, from 816 pooled test-day
 samples across 5 folds. Program 1's directional labels reliably predict
 next-bar continuation on this data, robustly across every seed and
 parameter variation tried during development.
 
-**The reversion edge does not**: `reversion_edge=0.005`, `reversion_p=0.459`
-— indistinguishable from the random-walk null, on data that was
-deliberately built to contain real mean-reversion.
+**The reversion edge does not**: `reversion_edge=0.016`, `reversion_p=0.477`
+(308 samples) — indistinguishable from the random-walk null, on data that
+was deliberately built to contain real mean-reversion.
 
 ### 3.1 Diagnosing why, instead of shrugging
 
@@ -212,24 +222,28 @@ mean-reversion mechanism itself, and the OU calibration that measures it,
 both work.
 
 **So what's destroying it in the full pipeline?** Regime-label precision.
-Fitting the same HMM on this fixture (non-walk-forward, just to inspect the
-confusion matrix) gives only **40.8%** overall accuracy against true
-labels — and of the days the HMM actually calls `"sideways"`, only
-**25.9%** are truly from a reverting block. The other ~74% are mostly
-mislabeled trend-block days. A real, ~9-point edge measured against labels
-that are right barely a quarter of the time washes out to statistical
-noise by the time it's pooled and tested — not because the edge isn't
-there, but because the label used to find it mostly isn't pointing at it.
+Under the walk-forward causal decode, the labels are right **45%** of the time
+overall (a one-in-three chance rate), and of the days labeled `"sideways"`,
+**49%** are truly from a reverting block. The other ~51% are bull or bear
+days by construction. A real, ~9-point edge measured against labels that are
+right about half the time is diluted to about 1.6 points
+(`reversion_edge=0.016`, p=0.477): not because the edge isn't there, but because
+the label used to find it mostly isn't pointing at it.
+
+An earlier version of this section quoted 25.9% precision and 40.8% accuracy.
+Those came from a single fit to the whole series, which labels each day using
+later data, so they didn't describe the walk-forward decode the test uses.
+They have been removed.
 
 This directly extends a finding [01_regime_detection.md](01_regime_detection.md)
 already reported: Program 1 is weak away from return shocks (44.7% overall
 for the Student-t model, 42.4% specifically away from shocks). This writeup
-adds the sharper, more specific version of that finding: the weakness isn't
-evenly spread across bull/bear/sideways — on data that mixes trending and
-reverting dynamics, `"sideways"` specifically is the label most degraded,
-to the point that a real, checkable mean-reversion edge underneath it
-becomes undetectable once you have to rely on the HMM to find the days it
-applies to.
+adds a more specific version of that finding: on data that mixes trending and
+reverting dynamics, the label that matters for this edge, `"sideways"`, is
+right about half the time, against a one-in-three chance rate. That is enough
+to hide a real, checkable mean-reversion edge once the HMM has to find the
+days it applies to. This is not a measurement of bull/bear label precision,
+so the writeup does not claim `"sideways"` is worse than the other two labels.
 
 ## 4. The sideways-dominance concern, answered directly
 
