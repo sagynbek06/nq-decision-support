@@ -149,9 +149,15 @@ def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_g
     opt-in "surprise" vote (`vote_from_surprise(surprise_context["wss"])`,
     weighted by `surprise_weight`, default 1.0 -- the same default weight
     as the other three) -- see `src/wss_signal.py`'s DESIGN NOTE for why
-    this one gets a vote where GEX/Hurst don't. Both are off by default:
-    omit `surprise_context` and nothing about this function's output
-    changes from before this parameter existed.
+    this one gets a vote where GEX/Hurst don't. If `weights` already has
+    a `"surprise"` key (e.g. from `src.dynamic_weights.
+    compute_dynamic_weights`, which can return one), that value is used
+    in place of `surprise_weight` -- so a single dynamically-computed
+    weights dict covering all active votes can be passed straight through
+    without having to split a "surprise" entry back out into a separate
+    argument. Both are off by default: omit `surprise_context` and
+    nothing about this function's output changes from before this
+    parameter existed.
 
     Returns a dict with the per-program votes, the weighted consensus
     score (in [-1, 1]), a "bullish"/"bearish"/"neutral" label (score within
@@ -179,13 +185,13 @@ def compute_consensus(regime_label, order_flow_signal, kernel_deviation, total_g
         "order_flow": vote_from_order_flow(order_flow_signal),
         "kernel": vote_from_kernel_deviation(kernel_deviation),
     }
-    active_weights = dict(weights)
+    active_weights = {k: weights[k] for k in DEFAULT_WEIGHTS}
 
     if include_surprise:
         if surprise_context is None:
             raise ValueError("compute_consensus: include_surprise=True requires surprise_context")
         votes["surprise"] = vote_from_surprise(surprise_context["wss"])
-        active_weights["surprise"] = surprise_weight
+        active_weights["surprise"] = weights.get("surprise", surprise_weight)
 
     total_weight = sum(active_weights[k] for k in votes)
     if total_weight <= 0:

@@ -255,6 +255,48 @@ def test_wrapper_widens_band_for_white_noise_and_narrows_for_trending():
     assert result_trending["effective_neutral_band"] < result_noise["effective_neutral_band"]
 
 
+def test_wrapper_forwards_regime_mode_to_compute_consensus():
+    """
+    compute_consensus_with_hurst predates Phase 5b's regime_mode -- this
+    confirms it was wired through rather than silently ignored, so Hurst's
+    band adjustment composes with the Ax regime sub-signal.
+    """
+    rng = np.random.default_rng(0)
+    returns = rng.normal(0, 0.01, size=1500)
+
+    with_subsignal = compute_consensus_with_hurst(
+        "bull", 0.0, 0.0, 0.0, returns=returns, random_state=1, n_bootstrap=50,
+        regime_mode="subsignal", regime_subsignal=0.8,
+    )
+    assert with_subsignal["votes"]["regime"] == pytest.approx(0.8)
+
+    with pytest.raises(ValueError):
+        compute_consensus_with_hurst(
+            "bull", 0.0, 0.0, 0.0, returns=returns, random_state=1, n_bootstrap=50,
+            regime_mode="subsignal",
+        )
+
+
+def test_wrapper_forwards_surprise_context_to_compute_consensus():
+    """Same composability check for Phase 5c's WSS vote."""
+    rng = np.random.default_rng(0)
+    returns = rng.normal(0, 0.01, size=1500)
+    context = {"active": True, "wss": 5.0, "events": []}
+
+    surfaced_only = compute_consensus_with_hurst(
+        "sideways", 0.0, 0.0, 0.0, returns=returns, random_state=1, n_bootstrap=50,
+        surprise_context=context,
+    )
+    assert surfaced_only["surprise_context"] == context
+    assert "surprise" not in surfaced_only["votes"]
+
+    voted = compute_consensus_with_hurst(
+        "sideways", 0.0, 0.0, 0.0, returns=returns, random_state=1, n_bootstrap=50,
+        surprise_context=context, include_surprise=True,
+    )
+    assert "surprise" in voted["votes"]
+
+
 def test_wrapper_can_change_the_label_relative_to_plain_compute_consensus():
     """
     Demonstrates the mechanism has real effect, not just cosmetic extra
