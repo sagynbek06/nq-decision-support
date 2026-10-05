@@ -23,6 +23,7 @@ from src.regime_detection_robust import (
     _solve_nu,
     fit_and_label,
 )
+from src.synthetic_data import generate_regime_switching_returns
 
 
 # ---------------------------------------------------------------------------
@@ -214,3 +215,33 @@ def test_fit_raises_runtime_error_when_every_init_fails(monkeypatch):
 
     with pytest.raises(RuntimeError, match="every random initialization failed"):
         model.fit(returns)
+
+
+# ---------------------------------------------------------------------------
+# 6. Causal decoding: filter_states never looks past the bar it labels
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def realistic_regime_data():
+    returns, _ = generate_regime_switching_returns(n_days=800, random_state=18)
+    model, _, _ = fit_and_label(returns[:400])
+    return returns, model
+
+
+def test_filter_states_never_uses_later_returns(realistic_regime_data):
+    returns, model = realistic_regime_data
+    full = model.filter_states(returns)
+    for k in (150, 325, 600):
+        assert model.filter_states(returns[:k])[-1] == full[k - 1]
+
+
+def test_viterbi_labels_do_use_later_returns(realistic_regime_data):
+    """
+    Contrast for the test above: Viterbi's global path relabels earlier bars
+    once later returns arrive (5 of 140 prefixes on this fixture), which is why
+    walk-forward labels must come from filter_states. Well-separated synthetic
+    data does not show this, so the fixture is the realistic generator.
+    """
+    returns, model = realistic_regime_data
+    full = model.predict(returns)
+    assert any(model.predict(returns[:k])[-1] != full[k - 1] for k in range(100, 800, 5))

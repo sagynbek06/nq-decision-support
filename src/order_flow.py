@@ -257,3 +257,17 @@ def compute_filtered_order_flow_signal(df, min_signal_components=1):
     result["volume_delta"] = features["volume_delta"].to_numpy()
     result["obi"] = features["obi"].to_numpy()
     return result
+
+
+def causal_mp_filter_signal(features, min_periods=60):
+    """
+    Lookahead-free counterpart of mp_filter_signal for backtests: bar t's value
+    is the composite the filter gives on rows 0..t, so its standardization and
+    eigenvector never see a later bar. NaN until `min_periods` rows exist.
+    mp_filter_signal fits on the whole sample and is kept for visualization.
+    """
+    X = np.asarray(features, dtype=float)
+    signal = np.full(len(X), np.nan)
+    for t in range(min_periods - 1, len(X)):
+        signal[t] = mp_filter_signal(X[: t + 1])["signal"][-1]
+    return signal
