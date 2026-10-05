@@ -269,6 +269,17 @@ class StudentTHMM:
         log_B = self._log_emissions(x, self.mu_, self.sigma2_, self.nu_)
         return _viterbi(np.log(self.pi_ + 1e-300), np.log(self.A_ + 1e-300), log_B)
 
+    def filter_states(self, returns):
+        """
+        Most likely state at each bar given only the returns up to that bar
+        (the forward/filtering pass). Viterbi's path labels an early bar using
+        later returns, so anything traded in real time must use this instead.
+        """
+        x = np.asarray(returns, dtype=float)
+        log_B = self._log_emissions(x, self.mu_, self.sigma2_, self.nu_)
+        log_alpha, _, _ = _forward_backward(np.log(self.pi_ + 1e-300), np.log(self.A_ + 1e-300), log_B)
+        return np.argmax(log_alpha, axis=1)
+
     def score(self, returns):
         """Total log-likelihood of a returns series under the fitted model."""
         x = np.asarray(returns, dtype=float)

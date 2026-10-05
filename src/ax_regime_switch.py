@@ -182,9 +182,13 @@ def validate_regime_edge(historical_bars, n_splits=5, n_permutations=DEFAULT_N_P
     time). For each fold, a fresh `StudentTHMM` is fit on only the data
     before the fold's test block (`hmm_kwargs` are passed through to
     `fit_and_label`, e.g. to use fewer random restarts for a faster test
-    run), then regimes are decoded via Viterbi over train+test together (so
-    the test block's decode is informed by the preceding path, not
-    restarted cold) and sliced down to just the test block. For every test
+    run), then regimes are decoded with the causal forward filter
+    (`StudentTHMM.filter_states`) over train+test together, and sliced down
+    to just the test block. Each test bar's label uses only returns up to
+    that bar, and the filter carries the training data's belief state into
+    the test block. Viterbi (`predict`) is not used: its path labels an
+    early bar using later returns, which would leak future information into
+    the edge estimate. For every test
     day with a next bar available: a bull/bear day's "success" is whether
     the next bar's return matches the regime's implied direction; a
     sideways day's "success" is whether it does, relative to a mu calibrated
@@ -218,16 +222,15 @@ def validate_regime_edge(historical_bars, n_splits=5, n_permutations=DEFAULT_N_P
     trend-continuation structure, non-significant on pure random walks.
     The REVERSION edge does not come through as reliably, even on synthetic
     data deliberately built with genuine Ornstein-Uhlenbeck mean-reversion
-    during "sideways" stretches -- traced to Program 1's "sideways" label
-    having poor precision on this kind of mixed data (confirmed directly: on
-    one such fixture, only ~26% of days the HMM called "sideways" were
-    actually from a true mean-reverting block), which dilutes a real,
-    detectable reversion effect (~58-59% directional accuracy when measured
-    against the TRUE block boundaries directly) down to statistical noise
-    once it's measured against the HMM's own, far noisier, boundaries. This
-    is consistent with, and a direct consequence of, this project's own
-    earlier finding that Program 1 is weak away from return shocks
-    (docs/writeups/01_regime_detection.md). Treat a non-significant
+    during "sideways" stretches. The cause is the regime label's precision on
+    this kind of mixed data: on one such fixture, the walk-forward decode
+    labels days "sideways" with only 49% precision (a one-in-three chance
+    rate), which dilutes a real reversion effect (~58-59% directional
+    accuracy when measured against the TRUE block boundaries directly) down
+    to statistical noise once it is measured against the HMM's own, noisier,
+    boundaries. This is consistent with, and a direct consequence of, this
+    project's own earlier finding that Program 1 is weak away from return
+    shocks (docs/writeups/01_regime_detection.md). Treat a non-significant
     reversion p-value from this function as a real, informative result about
     THIS system's current regime detector, not evidence the OU half-life
     module or the reversion math themselves are broken.
@@ -246,7 +249,7 @@ def validate_regime_edge(historical_bars, n_splits=5, n_permutations=DEFAULT_N_P
     for train_end, test_end in _walk_forward_folds(len(rtn), n_splits):
         model, state_labels, _ = fit_and_label(rtn[:train_end], **hmm_kwargs)
 
-        hidden = model.predict(rtn[:test_end])
+        hidden = model.filter_states(rtn[:test_end])
         decoded = np.array([state_labels[s] for s in hidden])
         test_labels = decoded[train_end:test_end]
 

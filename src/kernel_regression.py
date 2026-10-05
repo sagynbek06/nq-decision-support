@@ -18,11 +18,10 @@ every observation in the sample, including points *after* t ("future"
 information relative to that point). That's appropriate for understanding
 and visualizing where price sat relative to its local trend historically,
 but it is not valid as-is for a live trading signal -- using it that way
-would leak lookahead information. A causal variant (one-sided kernel, only
-weighting past observations) is straightforward to build on this same
-`nadaraya_watson_regression` function by restricting the evaluation to
-`x <= x0`, but is deferred here; walk-forward discipline for every program
-in this system is explicitly Phase 7's job (see ROADMAP.md).
+would leak lookahead information. The causal variant is
+`causal_nadaraya_watson` below, which the risk backtest uses; this function
+remains the retrospective fit for visualization. Walk-forward discipline for
+the remaining programs is still explicitly Phase 7's job (see ROADMAP.md).
 
 METHODOLOGICAL NOTE 2 -- `loocv_select_bandwidth`'s bandwidth is the one
 that minimizes one-step reconstruction error, which is the textbook-correct
@@ -43,6 +42,7 @@ trend a human would find legible rather than a minimal-error reconstruction.
 """
 
 import numpy as np
+import pandas as pd
 
 
 def gaussian_kernel(u):
@@ -154,3 +154,30 @@ def fit_kernel_regression(price, bandwidths=DEFAULT_BANDWIDTH_GRID):
         "estimate": estimate,
         "signal": signal,
     }
+
+
+def causal_nadaraya_watson(y, bandwidth):
+    """
+    One-sided Nadaraya-Watson: estimate[t] is a kernel-weighted average of
+    y[0..t] only. The lag mask zeroes every weight on a later point, so the
+    estimate at t cannot depend on anything after t.
+    """
+    y = np.asarray(y, dtype=float)
+    idx = np.arange(len(y))
+    lag = idx[:, None] - idx[None, :]
+    weights = gaussian_kernel(lag / bandwidth) * (lag >= 0)
+    return (weights @ y) / weights.sum(axis=1)
+
+
+def causal_deviation_signal(y, bandwidth, standardization_window=252, min_periods=20):
+    """
+    Lookahead-free counterpart of fit_kernel_regression's deviation signal:
+    each bar's residual from its one-sided estimate, divided by the trailing
+    standard deviation of residuals. NaN until `min_periods` residuals exist.
+    Standardizing by the full-sample std, as fit_kernel_regression does, would
+    fold future residuals into every bar's signal.
+    """
+    y = np.asarray(y, dtype=float)
+    residuals = y - causal_nadaraya_watson(y, bandwidth)
+    trailing_std = pd.Series(residuals).rolling(standardization_window, min_periods=min_periods).std().to_numpy()
+    return np.divide(residuals, trailing_std, out=np.full(len(y), np.nan), where=trailing_std > 0)
