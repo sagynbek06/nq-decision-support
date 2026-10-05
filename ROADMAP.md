@@ -45,6 +45,29 @@ with Program 4's GEX surfaced separately as volatility-regime context rather
 than folded into the vote, since it isn't a directional signal (see
 [docs/writeups/05_consensus_engine.md](docs/writeups/05_consensus_engine.md)).
 
+### Phase 5 extensions — ✅ Complete
+Hurst-modulated neutral band, Ax-style regime-conditioned sub-signal (opt-in
+`regime_mode`), WSS surprise context, accuracy-weighted votes, and CDaR-throttled
+position sizing with a train/held-out calibration sweep. Writeups 05a and 05b;
+sizing results in `reports/position_sizing_sweep.txt`.
+
+**Outcome:** the held-out sweep shows no reliable edge on synthetic daily data
+(held-out Sharpe near zero or negative across settings). That is a finding, not
+a bug; see writeup 06 for why a calibrated gate agrees.
+
+### Phase 5.5: Uncertainty and online regime tools — ✅ Modules done, wiring open
+`src/conformal_gate.py` (adaptive conformal intervals, abstain when the interval
+contains zero) and `src/bocpd.py` (Bayesian online changepoint detection). See
+[docs/writeups/06_conformal_gate_and_bocpd.md](docs/writeups/06_conformal_gate_and_bocpd.md).
+
+Open items, in priority order:
+1. Soft conformal sizing (size by |forecast| / interval width) instead of the hard in/out cut, tested held-out across seeds.
+2. Intraday (1-minute) version of the sizing backtest. Everything in `src/risk/` is daily, while the stated goal is 1-5 trades per DAY; "trades per week" in the calibration is a daily-bar artifact.
+3. Wire `bocpd.regime_age_confidence` as a multiplier on the regime vote, only if it improves held-out results.
+4. Hawkes-process order-flow-imbalance forecasting for Program 2 (needs real or realistic tick data).
+5. Conformal intervals around scheduled macro events, tied to the WSS event database.
+6. Deflated Sharpe on the sizing sweep, via the existing `deflated-sharpe` library, before any result is described as an edge.
+
 ## Phase 6: Real Data Integration
 Bloomberg API and Rithmic integration to replace historical/sample data with
 live and production-grade market data feeds.

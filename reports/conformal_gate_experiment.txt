@@ -1,0 +1,14 @@
+Held-out comparison (last 40% of decisions), baseline neutral-band sizing vs conformal gate.
+Synthetic data, 2 bps per unit turnover, forecast scale and band both fit on the first 60% only.
+
+ seed  base_sharpe  base_tpw  a10_sharpe  a10_tpw  a10_abstain  a10_coverage  a25_sharpe  a25_tpw  a25_abstain  a25_coverage
+   11       -0.742     1.507         0.0      0.0          1.0         0.900         0.0      0.0          1.0         0.746
+   12        0.221     1.842         0.0      0.0          1.0         0.897         0.0      0.0          1.0         0.741
+   13       -0.147     0.469         0.0      0.0          1.0         0.913         0.0      0.0          1.0         0.775
+   14        0.650     0.971         0.0      0.0          1.0         0.859         0.0      0.0          1.0         0.717
+   15        0.718     0.848         0.0      0.0          1.0         0.886         0.0      0.0          1.0         0.737
+   16        0.156     1.853         0.0      0.0          1.0         0.846         0.0      0.0          1.0         0.708
+
+        base_sharpe  base_tpw  a10_sharpe  a10_tpw  a10_abstain  a10_coverage  a25_sharpe  a25_tpw  a25_abstain  a25_coverage
+mean          0.143     1.248         0.0      0.0          1.0         0.884         0.0      0.0          1.0         0.737
+median        0.188     1.239         0.0      0.0          1.0         0.892         0.0      0.0          1.0         0.739
