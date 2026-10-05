@@ -240,12 +240,22 @@ def hurst_to_threshold_multiplier(hurst, confidence_interval, max_multiplier=2.0
 def compute_consensus_with_hurst(
     regime_label, order_flow_signal, kernel_deviation, total_gex, returns,
     weights=None, n_bootstrap=DEFAULT_N_BOOTSTRAP, confidence=DEFAULT_CONFIDENCE,
-    random_state=None, **dfa_kwargs
+    random_state=None,
+    regime_mode="label", regime_subsignal=None,
+    surprise_context=None, include_surprise=False, surprise_weight=1.0,
+    **dfa_kwargs
 ):
     """
     Thin wrapper around consensus_engine.compute_consensus that widens or
     narrows its neutral band based on the current rolling Hurst exponent,
     without changing compute_consensus's signature or internals.
+
+    `regime_mode`/`regime_subsignal` and `surprise_context`/
+    `include_surprise`/`surprise_weight` are forwarded straight through to
+    the inner `compute_consensus` call, unchanged from its own defaults --
+    added so this wrapper composes with Phase 5b's Ax regime sub-signal and
+    Phase 5c's WSS vote instead of silently ignoring them (this wrapper
+    predates both). Omit them and nothing changes from before they existed.
 
     MECHANISM -- compute_consensus reads NEUTRAL_BAND as a module-level
     constant, not a function parameter (deliberately: that function's
@@ -281,7 +291,10 @@ def compute_consensus_with_hurst(
     try:
         consensus_engine.NEUTRAL_BAND = effective_neutral_band
         result = consensus_engine.compute_consensus(
-            regime_label, order_flow_signal, kernel_deviation, total_gex, weights=weights
+            regime_label, order_flow_signal, kernel_deviation, total_gex, weights=weights,
+            regime_mode=regime_mode, regime_subsignal=regime_subsignal,
+            surprise_context=surprise_context, include_surprise=include_surprise,
+            surprise_weight=surprise_weight,
         )
     finally:
         consensus_engine.NEUTRAL_BAND = original_neutral_band

@@ -237,6 +237,31 @@ def test_include_surprise_respects_custom_surprise_weight():
     assert abs(result["score"]) < abs(vote_from_surprise(5.0)) / 4
 
 
+def test_include_surprise_prefers_a_surprise_key_already_in_weights_over_surprise_weight():
+    """A weights dict that already carries a 'surprise' entry (e.g. from
+    src.dynamic_weights.compute_dynamic_weights) is used for that vote's
+    weight automatically -- the separate surprise_weight argument is only
+    a fallback for when weights doesn't have one."""
+    context = {"active": True, "wss": 5.0, "events": []}
+    weights = {"regime": 1.0, "order_flow": 1.0, "kernel": 1.0, "surprise": 7.0}
+
+    result = compute_consensus(
+        "sideways", 0.0, 0.0, 0.0, weights=weights,
+        surprise_context=context, include_surprise=True, surprise_weight=0.1,
+    )
+    assert result["weights"]["surprise"] == pytest.approx(7.0)
+
+
+def test_weights_echo_omits_surprise_key_when_surprise_vote_is_inactive():
+    """A 'surprise' entry in weights isn't used unless include_surprise=True,
+    so it must not appear in the returned weights either -- the echo should
+    only list weights that were actually applied to the score."""
+    weights = {"regime": 1.0, "order_flow": 1.0, "kernel": 1.0, "surprise": 9.0}
+    result = compute_consensus("bull", 0.0, 0.0, 0.0, weights=weights)
+    assert "surprise" not in result["weights"]
+    assert set(result["weights"]) == set(DEFAULT_WEIGHTS)
+
+
 def test_include_surprise_requires_surprise_context():
     with pytest.raises(ValueError):
         compute_consensus("bull", 0.0, 0.0, 0.0, include_surprise=True)
