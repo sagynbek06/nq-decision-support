@@ -31,7 +31,24 @@ DEPTH_IMBALANCE_RETURN_SENSITIVITY = 3.0
 DEFAULT_SMOOTHING_WINDOWS = (3, 5, 10)
 
 
-def generate_synthetic_order_flow(price_df, random_state=42):
+PRIOR_TYPICAL_ABS_RETURN = 0.008
+PRIOR_RETURN_SCALE = 0.01
+MIN_SCALE_OBS = 20
+
+
+def _expanding_scales(log_return):
+    r = np.asarray(log_return, dtype=float)
+    counts = np.arange(1, len(r) + 1, dtype=float)
+    mean = np.cumsum(r) / counts
+    mean_abs = np.cumsum(np.abs(r)) / counts
+    variance = np.maximum(np.cumsum(r * r) / counts - mean * mean, 0.0)
+    ready = counts >= MIN_SCALE_OBS
+    typical_abs_return = np.where(ready, mean_abs, PRIOR_TYPICAL_ABS_RETURN)
+    return_scale = np.where(ready, np.sqrt(variance), PRIOR_RETURN_SCALE)
+    return typical_abs_return, return_scale
+
+
+def generate_synthetic_order_flow(price_df, random_state=42, causal_scales=False):
     """
     Generate synthetic daily trade volume and resting order-book depth,
     correlated with `price_df`'s `log_return` column (from
@@ -61,13 +78,22 @@ def generate_synthetic_order_flow(price_df, random_state=42):
     None of these coefficients are calibrated to real NQ order flow -- they
     produce directionally sensible, non-degenerate synthetic data for
     testing the Volume Delta / OBI / MP-filtering logic below, nothing more.
+
+    causal_scales=True replaces the two full-sample scale constants (mean
+    |return| and return std) with expanding-window statistics, falling back to
+    fixed priors for the first MIN_SCALE_OBS bars, so no bar's volumes or depths
+    depend on a later return. The default keeps the full-sample scales that the
+    earlier analyses used, which is why those analyses are not lookahead-free.
     """
     rng = np.random.default_rng(random_state)
     log_return = price_df["log_return"].to_numpy()
     n = len(log_return)
     abs_return = np.abs(log_return)
-    typical_abs_return = np.mean(abs_return)
-    return_scale = np.std(log_return)
+    if causal_scales:
+        typical_abs_return, return_scale = _expanding_scales(log_return)
+    else:
+        typical_abs_return = np.mean(abs_return)
+        return_scale = np.std(log_return)
 
     # --- total traded volume: scales with the realized-volatility proxy ---
     vol_ratio = abs_return / typical_abs_return

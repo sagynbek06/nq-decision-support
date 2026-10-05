@@ -5,14 +5,21 @@ and plots the sweep the choice is made from.
 Usage:  python -m src.risk.calibrate_sizing
 Output: reports/position_sizing_sweep.png and reports/position_sizing_sweep.txt
 
-Every signal feeding the sweep is causal:
+Signals feeding the sweep, and where they are not causal:
 - Program 1: walk-forward Student-t HMM over 8 expanding folds, labelled with the
   filtered (forward-pass) state, not Viterbi, whose path uses later returns.
   Bars before the first fold's test block have no out-of-sample regime and are
   not decisions.
-- Program 2: Marchenko-Pastur composite fit on an expanding window.
-- Program 3: one-sided Nadaraya-Watson, bandwidth chosen by LOOCV on the training
-  prices only, residuals standardized by a trailing 252-bar std.
+- Program 2: Marchenko-Pastur composite fit on an expanding window. Not causal
+  here: the synthetic order-flow scales use the full sample
+  (generate_synthetic_order_flow without causal_scales). The walk-forward
+  pipeline uses causal_scales=True. See docs/writeups/07_overfitting_audit.md,
+  section 5.
+- Program 3: one-sided Nadaraya-Watson, residuals standardized by a trailing
+  252-bar std. Not causal here: one bandwidth is chosen by LOOCV on the prices
+  before the held-out block, so early training decisions use a bandwidth informed
+  by later training prices. The walk-forward pipeline chooses one bandwidth per
+  fold.
 - Consensus: equal weights over the regime, order-flow and kernel votes. The
   Hurst band, WSS and dynamic weights are left out, so the swept band is the only
   threshold.
@@ -56,7 +63,7 @@ COST_SENSITIVITY = (0.0, 0.0005, 0.001)
 BASE_COST = 0.0002
 
 
-def walk_forward_regime_labels(log_returns, n_splits=N_REGIME_SPLITS):
+def walk_forward_regime_labels(log_returns, n_splits=N_REGIME_SPLITS, **hmm_kwargs):
     n = len(log_returns)
     block = n // (n_splits + 1)
     boundaries = [block * k for k in range(n_splits + 2)]
@@ -64,7 +71,7 @@ def walk_forward_regime_labels(log_returns, n_splits=N_REGIME_SPLITS):
     labels = np.full(n, None, dtype=object)
     for k in range(1, n_splits + 1):
         train_end, test_end = boundaries[k], boundaries[k + 1]
-        model, state_labels, _ = fit_and_label(log_returns[:train_end])
+        model, state_labels, _ = fit_and_label(log_returns[:train_end], **hmm_kwargs)
         hidden = model.filter_states(log_returns[:test_end])
         decoded = np.array([state_labels[s] for s in hidden], dtype=object)
         labels[train_end:test_end] = decoded[train_end:test_end]
