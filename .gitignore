@@ -16,8 +16,8 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data files
-data/
+# Data files (anchored to the repo root, so the src/data package stays trackable)
+/data/
 *.csv
 *.parquet
 *.h5
