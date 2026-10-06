@@ -17,7 +17,8 @@ call. No part of this project is intended to place trades autonomously.
 - **Phase 2: Order Flow Monitor — complete**
 - **Phase 3: Kernel Regression — complete**
 - **Phase 4: Greeks Dashboard — complete**
-- **Phase 5: Consensus Engine — complete**
+- **Phase 5: Consensus Engine — complete**, with extensions: Hurst threshold modulator (05a), Ax regime-switch sub-signal (05b), WSS surprise context, dynamic per-vote weights, CDaR position sizing calibrated on a train/held-out split
+- **Beyond the original plan: conformal abstention gate and Bayesian online changepoint detection** ([writeup 06](docs/writeups/06_conformal_gate_and_bocpd.md)). Not yet wired into the consensus.
 - Phase 6: Real Data Integration — not started
 - Phase 7: Walk-Forward Hyperparameter Optimization — not started
 
