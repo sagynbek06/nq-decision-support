@@ -19,6 +19,7 @@ __pycache__/
 # Data files
 data/
 *.csv
+!results/experiment_log.csv
 *.parquet
 *.h5
 *.hdf5

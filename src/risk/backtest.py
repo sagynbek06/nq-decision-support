@@ -39,6 +39,7 @@ def run_sized_backtest(
         raise ValueError("consensus_results and next_returns must be the same length")
 
     n = len(next_returns)
+    bands = np.broadcast_to(np.asarray(neutral_band, dtype=float), (n,))
     equity = [1.0]
     positions = np.zeros(n)
     net_returns = np.zeros(n)
@@ -46,7 +47,7 @@ def run_sized_backtest(
     previous = 0.0
     for t in range(n):
         cdar = trailing_cdar(equity, cdar_alpha, cdar_window)
-        position = position_size(consensus_results[t], cdar, cdar_limit, neutral_band=neutral_band)
+        position = position_size(consensus_results[t], cdar, cdar_limit, neutral_band=bands[t])
         turnover = abs(position - previous)
         net = position * next_returns[t] - cost_per_unit_turnover * turnover
         equity.append(equity[-1] * (1.0 + net))

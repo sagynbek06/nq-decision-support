@@ -78,3 +78,14 @@ def test_summarize_reports_annualized_sharpe_and_weekly_trade_rate():
 def test_summarize_rejects_an_empty_segment():
     with pytest.raises(ValueError):
         summarize(np.array([]), np.array([], dtype=bool))
+
+
+def test_per_bar_neutral_band_changes_only_the_bars_it_touches():
+    consensus = [_consensus(0.3)] * 3
+    returns = np.zeros(3)
+    scalar = run_sized_backtest(consensus, returns, neutral_band=0.0, cdar_limit=1.0, cost_per_unit_turnover=0.0)
+    per_bar = run_sized_backtest(consensus, returns, neutral_band=np.array([0.0, 0.5, 0.0]), cdar_limit=1.0,
+                                 cost_per_unit_turnover=0.0)
+    assert per_bar["positions"][0] == scalar["positions"][0]
+    assert per_bar["positions"][1] == 0.0
+    assert per_bar["positions"][2] == scalar["positions"][2]
